@@ -1,0 +1,48 @@
+FROM node:22-alpine AS frontend-builder
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM composer:2 AS composer-builder
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --no-progress \
+    --prefer-dist \
+    --optimize-autoloader
+
+FROM php:8.4-apache
+WORKDIR /var/www/html
+
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    unzip \
+    git \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql gd zip bcmath \
+    && a2enmod rewrite \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
+    && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
+COPY . .
+COPY --from=composer-builder /app/vendor ./vendor
+COPY --from=frontend-builder /app/public/build ./public/build
+
+RUN chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 80
+
+CMD ["apache2-foreground"]
