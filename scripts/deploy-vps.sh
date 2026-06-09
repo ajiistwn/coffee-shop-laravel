@@ -37,13 +37,11 @@ if [ -z "$MYSQL_DATABASE" ] || [ -z "$MYSQL_USER" ] || [ -z "$MYSQL_PASSWORD" ] 
   exit 1
 fi
 
-echo "Build image aplikasi: $APP_IMAGE_NAME:$APP_IMAGE_TAG"
-docker build -t "$APP_IMAGE_NAME:$APP_IMAGE_TAG" .
-
 if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
   docker network create "$DOCKER_NETWORK"
 fi
 
+# Jalankan MySQL lebih dulu sebelum build image agar tidak membuang waktu tunggu
 if ! docker ps -a --format '{{.Names}}' | grep -Eq "^$MYSQL_CONTAINER_NAME$"; then
   echo "Membuat container MySQL baru: $MYSQL_CONTAINER_NAME"
   docker run -d \
@@ -62,18 +60,27 @@ else
   if ! docker ps --format '{{.Names}}' | grep -Eq "^$MYSQL_CONTAINER_NAME$"; then
     echo "Menyalakan container MySQL: $MYSQL_CONTAINER_NAME"
     docker start "$MYSQL_CONTAINER_NAME"
+  else
+    echo "Container MySQL sudah berjalan: $MYSQL_CONTAINER_NAME"
   fi
 fi
 
-for i in $(seq 1 30); do
+echo "Build image aplikasi: $APP_IMAGE_NAME:$APP_IMAGE_TAG"
+docker build -t "$APP_IMAGE_NAME:$APP_IMAGE_TAG" .
+
+# Tunggu MySQL ready — inisialisasi pertama kali bisa sampai 3 menit
+MYSQL_TIMEOUT=90
+echo "Menunggu MySQL ready (maks ${MYSQL_TIMEOUT} detik)..."
+for i in $(seq 1 "$MYSQL_TIMEOUT"); do
   if docker exec "$MYSQL_CONTAINER_NAME" mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent >/dev/null 2>&1; then
+    echo "MySQL ready setelah ${i} detik."
     break
   fi
-  if [ "$i" -eq 30 ]; then
-    echo "MySQL tidak ready setelah 60 detik."
+  if [ "$i" -eq "$MYSQL_TIMEOUT" ]; then
+    echo "MySQL tidak ready setelah ${MYSQL_TIMEOUT} detik. Cek log: docker logs $MYSQL_CONTAINER_NAME"
     exit 1
   fi
-  sleep 2
+  sleep 1
 done
 
 if docker ps -a --format '{{.Names}}' | grep -Eq "^$APP_CONTAINER_NAME$"; then
