@@ -1,69 +1,88 @@
-# Deploy Lokal di VPS (Tanpa GitHub Actions)
+# Deployment Docker (Laravel 12 + React + MySQL)
 
-Dokumen ini untuk deploy langsung dari VPS tanpa `gh`, tanpa API GitHub, dan tanpa trigger workflow.
+Dokumen ini untuk deploy aplikasi langsung dari source yang sama (tanpa memindahkan struktur folder) menggunakan Docker Compose.
 
-## Prasyarat
+## Yang sudah diotomatisasi
 
-- Docker dan Docker Compose plugin sudah terpasang di VPS.
-- Repository sudah di-clone di VPS.
-- File env aplikasi tersedia (contoh: `.env` di root project).
-- `DB_ROOT_PASSWORD` tersedia di env file atau di environment shell.
+- Install dependency PHP (`composer install --no-dev`) saat build image.
+- Install dependency Node (`npm ci`) dan build frontend (`npm run build`) saat build image.
+- Jalankan aplikasi dengan `php artisan serve` di container app.
+- Jalankan scheduler dengan `php artisan schedule:work` di container app.
+- Buat `storage:link` otomatis saat container start.
+- Menunggu MySQL siap lalu menjalankan `php artisan migrate --force`.
 
-## Sekali setup
+## Prasyarat VPS
 
-1. Masuk ke folder project:
-   - `cd ~/apps/coffee-shop-laravel`
-2. Buat script jadi executable:
-   - `chmod +x scripts/deploy-vps.sh`
+- Docker Engine dan Docker Compose plugin aktif.
+- Port lokal untuk app tidak bentrok (default `8082` dari `.env.example`).
+- Domain sudah diarahkan ke VPS, dan Nginx host tersedia di VPS.
 
-## Deploy harian (1 command)
+## 1) Siapkan environment aplikasi
 
-Setelah `git pull`, jalankan:
+Di root project (folder yang sama dengan `artisan`), buat/copy `.env`:
 
-- `./scripts/deploy-vps.sh`
+- `cp .env.example .env`
 
-Atau langsung satu baris:
+Wajib diisi:
 
-- `git pull origin main && ./scripts/deploy-vps.sh`
-
-## Variabel yang dipakai script
-
-Script membaca env dari `.env` (atau path pada `APP_ENV_FILE_PATH`) dan environment shell.
-
-### Wajib
-
+- `APP_KEY` (jalankan sekali: `php artisan key:generate` jika belum ada)
 - `DB_DATABASE`
 - `DB_USERNAME`
 - `DB_PASSWORD`
 - `DB_ROOT_PASSWORD`
+- `APP_LOCAL_PORT` (contoh: `8082`)
 
-### Opsional (dengan default)
+Catatan:
 
-- `APP_ENV_FILE_PATH` (default `.env`)
-- `APP_IMAGE_NAME` (default `coffee-shop-laravel-app`)
-- `APP_IMAGE_TAG` (default git short SHA terbaru)
-- `APP_CONTAINER_NAME` (default `coffee-shop-laravel`)
-- `APP_LOCAL_PORT` (default `8080`)
-- `APP_DOCKER_NETWORK` (default `coffee-shop-network`)
-- `MYSQL_IMAGE` (default `mysql:8.4`)
-- `MYSQL_CONTAINER_NAME` (default `coffee-shop-mysql`)
-- `MYSQL_VOLUME_NAME` (default `coffee-shop-mysql-data`)
-- `MYSQL_DATABASE` (fallback ke `DB_DATABASE`)
-- `MYSQL_USER` (fallback ke `DB_USERNAME`)
-- `MYSQL_PASSWORD` (fallback ke `DB_PASSWORD`)
-- `MYSQL_ROOT_PASSWORD` (fallback ke `DB_ROOT_PASSWORD`)
+- `docker-compose.yml` otomatis memaksa koneksi app ke MySQL container (`DB_HOST=mysql`).
+- App dipublish ke `127.0.0.1:${APP_LOCAL_PORT}` agar aman dan siap diproxy oleh Nginx VPS.
 
-## Yang dilakukan script deploy
+## 2) Build dan jalankan container
 
-1. Build image aplikasi dari source terbaru.
-2. Membuat Docker network jika belum ada.
-3. Menjalankan MySQL container (atau start jika sudah ada).
-4. Menjalankan ulang container aplikasi dengan image terbaru.
-5. Menjalankan `php artisan migrate --force`.
-6. Membersihkan dangling image.
+Jalankan dari root project:
 
-## Catatan akses aplikasi
+- `docker compose up -d --build`
 
-- Container aplikasi bind ke `127.0.0.1:<APP_LOCAL_PORT>:80`.
-- Service tidak terbuka langsung ke internet.
-- Akses publik tetap lewat Nginx reverse proxy di VPS.
+Cek status:
+
+- `docker compose ps`
+- `docker compose logs -f app`
+
+## 3) Perintah maintenance yang sering dipakai
+
+- Stop service: `docker compose down`
+- Restart app saja: `docker compose restart app`
+- Rebuild penuh: `docker compose up -d --build --force-recreate`
+- Lihat log MySQL: `docker compose logs -f mysql`
+
+## 4) Reverse proxy Nginx VPS ke domain
+
+Contoh server block Nginx di host VPS:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Sesuaikan `8082` dengan nilai `APP_LOCAL_PORT` pada `.env`.
+
+Setelah ubah config:
+
+- `sudo nginx -t`
+- `sudo systemctl reload nginx`
+
+## 5) Catatan penting
+
+- Jangan ubah struktur folder project: semua file deployment berada di dalam root project yang sama.
+- Data MySQL disimpan di Docker volume `mysql-data` agar tetap aman saat container app di-rebuild.
+- Jika ingin menonaktifkan migrate otomatis saat startup, set `RUN_MIGRATIONS=false` di `.env`.
