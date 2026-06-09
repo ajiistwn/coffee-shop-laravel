@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     php-cli \
     php-mbstring \
     php-xml \
-    php-mysql \
+    php-sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
@@ -26,7 +26,15 @@ RUN npm ci
 COPY . .
 COPY --from=composer-builder /app/vendor ./vendor
 
-RUN npm run build
+# Laravel butuh .env + direktori storage agar php artisan bisa boot
+# DB_CONNECTION=sqlite agar tidak perlu koneksi MySQL saat build
+RUN cp .env.example .env \
+    && mkdir -p storage/logs \
+               storage/framework/cache \
+               storage/framework/sessions \
+               storage/framework/views \
+               bootstrap/cache \
+    && DB_CONNECTION=sqlite npm run build
 
 FROM php:8.4-apache
 WORKDIR /var/www/html
