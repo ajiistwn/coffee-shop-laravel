@@ -16,6 +16,8 @@ services:
       DB_DATABASE: ${DB_DATABASE}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      RUN_COMPOSER_INSTALL: ${RUN_COMPOSER_INSTALL:-true}
+      RUN_NPM_BUILD: ${RUN_NPM_BUILD:-true}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       WAIT_FOR_DB: ${WAIT_FOR_DB:-true}
     ports:

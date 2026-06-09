@@ -43,6 +43,23 @@ if [ "${WAIT_FOR_DB:-true}" = "true" ]; then
   '
 fi
 
+if [ "${RUN_COMPOSER_INSTALL:-true}" = "true" ]; then
+  echo "Menjalankan composer install..."
+  composer install \
+    --no-dev \
+    --prefer-dist \
+    --no-interaction \
+    --no-progress \
+    --optimize-autoloader
+fi
+
+if [ "${RUN_NPM_BUILD:-true}" = "true" ]; then
+  echo "Menjalankan npm install dan npm run build..."
+  npm install
+  npm run build
+  rm -rf node_modules
+fi
+
 php artisan storage:link || true
 
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then

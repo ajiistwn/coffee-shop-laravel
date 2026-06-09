@@ -4,8 +4,9 @@ Dokumen ini untuk deploy aplikasi langsung dari source yang sama (tanpa memindah
 
 ## Yang sudah diotomatisasi
 
-- Install dependency PHP (`composer install --no-dev`) saat build image.
-- Install dependency Node (`npm ci`) dan build frontend (`npm run build`) saat build image.
+- Menjalankan MySQL container lebih dulu.
+- Install dependency PHP (`composer install --no-dev`) saat container app start.
+- Install dependency Node (`npm install`) dan build frontend (`npm run build`) saat container app start.
 - Build image MySQL lokal dari `docker/mysql/Dockerfile`.
 - Jalankan aplikasi dengan `php artisan serve` di container app.
 - Jalankan scheduler dengan `php artisan schedule:work` di container app.
@@ -37,6 +38,7 @@ Catatan:
 
 - `docker-compose.yml` otomatis memaksa koneksi app ke MySQL container (`DB_HOST=mysql`).
 - Saat menjalankan `docker compose up -d --build`, image app dan image MySQL sama-sama di-build.
+- Urutan startup app: tunggu DB siap -> `composer install` -> `npm install` -> `npm run build` -> `storage:link` -> migrate -> start web + scheduler.
 - App dipublish ke `127.0.0.1:${APP_LOCAL_PORT}` agar aman dan siap diproxy oleh Nginx VPS.
 
 ## 2) Build dan jalankan container
@@ -88,3 +90,4 @@ Setelah ubah config:
 - Jangan ubah struktur folder project: semua file deployment berada di dalam root project yang sama.
 - Data MySQL disimpan di Docker volume `mysql-data` agar tetap aman saat container app di-rebuild.
 - Jika ingin menonaktifkan migrate otomatis saat startup, set `RUN_MIGRATIONS=false` di `.env`.
+- Jika ingin skip install/build saat restart berikutnya, set `RUN_COMPOSER_INSTALL=false` dan `RUN_NPM_BUILD=false` di `.env`.
