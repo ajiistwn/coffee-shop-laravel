@@ -1,22 +1,32 @@
-FROM node:22-alpine AS frontend-builder
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
 FROM composer:2 AS composer-builder
 WORKDIR /app
 
 COPY composer.json composer.lock ./
 RUN composer install \
     --no-dev \
+    --no-scripts \
     --no-interaction \
     --no-progress \
     --prefer-dist \
     --optimize-autoloader
+
+FROM node:22-bookworm-slim AS frontend-builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    php-cli \
+    php-mbstring \
+    php-xml \
+    php-mysql \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+COPY --from=composer-builder /app/vendor ./vendor
+
+RUN npm run build
 
 FROM php:8.4-apache
 WORKDIR /var/www/html
