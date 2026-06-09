@@ -34,6 +34,11 @@ Wajib diisi:
 - `DB_ROOT_PASSWORD`
 - `APP_LOCAL_PORT` (contoh: `8082`)
 
+Penting:
+
+- Jangan isi `DB_USERNAME=root` untuk setup ini.
+- Gunakan user aplikasi terpisah (contoh: `coffee_shop_user`), karena MySQL container mengharapkan `MYSQL_USER` non-root.
+
 Catatan:
 
 - `docker-compose.yml` otomatis memaksa koneksi app ke MySQL container (`DB_HOST=mysql`).
@@ -91,3 +96,13 @@ Setelah ubah config:
 - Data MySQL disimpan di Docker volume `mysql-data` agar tetap aman saat container app di-rebuild.
 - Jika ingin menonaktifkan migrate otomatis saat startup, set `RUN_MIGRATIONS=false` di `.env`.
 - Jika ingin skip install/build saat restart berikutnya, set `RUN_COMPOSER_INSTALL=false` dan `RUN_NPM_BUILD=false` di `.env`.
+
+## 6) Jika MySQL status unhealthy
+
+Jalankan pengecekan:
+
+- `docker compose logs --tail=100 mysql`
+- Pastikan `.env` tidak memakai `DB_USERNAME=root`
+- Recreate dari nol setelah ubah `.env`:
+  - `docker compose down -v`
+  - `docker compose up -d --build`
