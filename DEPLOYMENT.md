@@ -6,6 +6,7 @@ Dokumen ini untuk deploy aplikasi langsung dari source yang sama (tanpa memindah
 
 - Install dependency PHP (`composer install --no-dev`) saat build image.
 - Install dependency Node (`npm ci`) dan build frontend (`npm run build`) saat build image.
+- Build image MySQL lokal dari `docker/mysql/Dockerfile`.
 - Jalankan aplikasi dengan `php artisan serve` di container app.
 - Jalankan scheduler dengan `php artisan schedule:work` di container app.
 - Buat `storage:link` otomatis saat container start.
@@ -35,6 +36,7 @@ Wajib diisi:
 Catatan:
 
 - `docker-compose.yml` otomatis memaksa koneksi app ke MySQL container (`DB_HOST=mysql`).
+- Saat menjalankan `docker compose up -d --build`, image app dan image MySQL sama-sama di-build.
 - App dipublish ke `127.0.0.1:${APP_LOCAL_PORT}` agar aman dan siap diproxy oleh Nginx VPS.
 
 ## 2) Build dan jalankan container
