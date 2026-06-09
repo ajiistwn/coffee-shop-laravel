@@ -1,9 +1,6 @@
 name: docker-deploy
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
@@ -103,6 +100,13 @@ jobs:
             ENV_FILE_PATH="${{ secrets.APP_ENV_FILE_PATH }}"
             GHCR_USERNAME="${{ secrets.GHCR_USERNAME }}"
             GHCR_TOKEN="${{ secrets.GHCR_TOKEN }}"
+            MYSQL_CONTAINER_NAME="${{ secrets.MYSQL_CONTAINER_NAME }}"
+            MYSQL_VOLUME_NAME="${{ secrets.MYSQL_VOLUME_NAME }}"
+            DOCKER_NETWORK="${{ secrets.APP_DOCKER_NETWORK }}"
+            MYSQL_ROOT_PASSWORD="${{ secrets.MYSQL_ROOT_PASSWORD }}"
+            MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
+            MYSQL_USER="${{ secrets.MYSQL_USER }}"
+            MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
 
             if [ -z "$CONTAINER_NAME" ]; then
               CONTAINER_NAME="coffee-shop-laravel"
@@ -110,6 +114,18 @@ jobs:
 
             if [ -z "$APP_PORT" ]; then
               APP_PORT="8080"
+            fi
+
+            if [ -z "$MYSQL_CONTAINER_NAME" ]; then
+              MYSQL_CONTAINER_NAME="coffee-shop-mysql"
+            fi
+
+            if [ -z "$MYSQL_VOLUME_NAME" ]; then
+              MYSQL_VOLUME_NAME="coffee-shop-mysql-data"
+            fi
+
+            if [ -z "$DOCKER_NETWORK" ]; then
+              DOCKER_NETWORK="coffee-shop-network"
             fi
 
             if [ -z "$ENV_FILE_PATH" ]; then
@@ -127,18 +143,61 @@ jobs:
               exit 1
             fi
 
+            if [ -z "$MYSQL_ROOT_PASSWORD" ] || [ -z "$MYSQL_DATABASE" ] || [ -z "$MYSQL_USER" ] || [ -z "$MYSQL_PASSWORD" ]; then
+              echo "MYSQL_ROOT_PASSWORD / MYSQL_DATABASE / MYSQL_USER / MYSQL_PASSWORD wajib diset di GitHub Secrets."
+              exit 1
+            fi
+
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             docker pull "$IMAGE_NAME:$IMAGE_TAG"
+            docker pull mysql:8.4
+
+            if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
+              docker network create "$DOCKER_NETWORK"
+            fi
 
             if docker ps -a --format '{{.Names}}' | grep -Eq "^$CONTAINER_NAME$"; then
               docker rm -f "$CONTAINER_NAME"
             fi
 
+            if docker ps -a --format '{{.Names}}' | grep -Eq "^$MYSQL_CONTAINER_NAME$"; then
+              docker rm -f "$MYSQL_CONTAINER_NAME"
+            fi
+
+            docker run -d \
+              --name "$MYSQL_CONTAINER_NAME" \
+              --restart unless-stopped \
+              --network "$DOCKER_NETWORK" \
+              -v "$MYSQL_VOLUME_NAME:/var/lib/mysql" \
+              -e MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
+              -e MYSQL_DATABASE="$MYSQL_DATABASE" \
+              -e MYSQL_USER="$MYSQL_USER" \
+              -e MYSQL_PASSWORD="$MYSQL_PASSWORD" \
+              mysql:8.4 \
+              --character-set-server=utf8mb4 \
+              --collation-server=utf8mb4_unicode_ci
+
+            for i in $(seq 1 30); do
+              if docker exec "$MYSQL_CONTAINER_NAME" mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "MySQL tidak ready setelah 60 detik."
+                exit 1
+              fi
+              sleep 2
+            done
+
             docker run -d \
               --name "$CONTAINER_NAME" \
               --restart unless-stopped \
+              --network "$DOCKER_NETWORK" \
               --env-file "$ENV_FILE_PATH" \
+              -e DB_HOST="$MYSQL_CONTAINER_NAME" \
+              -e DB_PORT="3306" \
               -p "127.0.0.1:$APP_PORT:80" \
               "$IMAGE_NAME:$IMAGE_TAG"
+
+            docker exec "$CONTAINER_NAME" php artisan migrate --force
 
             docker image prune -f
