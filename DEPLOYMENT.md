@@ -1,54 +1,69 @@
-# Docker CI/CD ke VPS
+# Deploy Lokal di VPS (Tanpa GitHub Actions)
 
-Pipeline ada di `.github/workflows/docker-deploy.yml` dengan alur:
+Dokumen ini untuk deploy langsung dari VPS tanpa `gh`, tanpa API GitHub, dan tanpa trigger workflow.
 
-1. Menjalankan test.
-2. Build dan push image Docker ke GHCR.
-3. SSH ke VPS, pull image terbaru, lalu jalankan container MySQL + container aplikasi pada network Docker yang sama.
+## Prasyarat
 
-## GitHub Secrets yang wajib diisi
+- Docker dan Docker Compose plugin sudah terpasang di VPS.
+- Repository sudah di-clone di VPS.
+- File env aplikasi tersedia (contoh: `.env` di root project).
+- `DB_ROOT_PASSWORD` tersedia di env file atau di environment shell.
 
-- `VPS_HOST`: IP/hostname VPS.
-- `VPS_USER`: user SSH VPS.
-- `VPS_SSH_KEY`: private key SSH untuk deploy.
-- `VPS_PORT`: port SSH (opsional, default `22`).
-- `GHCR_USERNAME`: username GitHub untuk pull image di VPS.
-- `GHCR_TOKEN`: personal access token dengan minimal scope `read:packages`.
-- `APP_ENV_FILE_PATH`: path file `.env` di VPS (contoh `/opt/coffee-shop-laravel/.env`).
-- `APP_CONTAINER_NAME`: nama container (opsional, default `coffee-shop-laravel`).
-- `APP_LOCAL_PORT`: port lokal VPS untuk container (opsional, default `8080`).
-- `APP_DOCKER_NETWORK`: nama docker network app + mysql (opsional, default `coffee-shop-network`).
-- `MYSQL_CONTAINER_NAME`: nama container MySQL (opsional, default `coffee-shop-mysql`).
-- `MYSQL_VOLUME_NAME`: nama volume data MySQL (opsional, default `coffee-shop-mysql-data`).
-- `MYSQL_ROOT_PASSWORD`: password root MySQL (wajib).
-- `MYSQL_DATABASE`: nama database aplikasi (wajib).
-- `MYSQL_USER`: user database aplikasi (wajib).
-- `MYSQL_PASSWORD`: password user database aplikasi (wajib).
+## Sekali setup
 
-## Perilaku deploy
+1. Masuk ke folder project:
+   - `cd ~/apps/coffee-shop-laravel`
+2. Buat script jadi executable:
+   - `chmod +x scripts/deploy-vps.sh`
 
-- Deploy membuat/menjalankan container MySQL `mysql:8.4` dengan volume persisten.
-- Container aplikasi dan MySQL berada pada docker network yang sama.
-- Container aplikasi dipublish ke `127.0.0.1:<APP_LOCAL_PORT>:80`.
-- Karena bind ke `127.0.0.1`, service tidak terbuka langsung ke public internet.
-- Routing domain dilakukan oleh Nginx VPS (vhost di `sites-available`) dan tidak dikelola dari repo ini.
-- Setelah container app jalan, workflow akan menjalankan `php artisan migrate --force` otomatis.
+## Deploy harian (1 command)
 
-## Konfigurasi `.env` di VPS
+Setelah `git pull`, jalankan:
 
-Pastikan `.env` aplikasi di VPS menggunakan database MySQL container:
+- `./scripts/deploy-vps.sh`
 
-- `DB_CONNECTION=mysql`
-- `DB_HOST=coffee-shop-mysql` (atau samakan dengan `MYSQL_CONTAINER_NAME`)
-- `DB_PORT=3306`
-- `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` harus sama dengan secret MySQL.
+Atau langsung satu baris:
 
-## Trigger pipeline
+- `git pull origin main && ./scripts/deploy-vps.sh`
 
-- Workflow ini **hanya** dijalankan manual melalui `workflow_dispatch` (tidak auto saat `push`).
-- Dari VPS, setelah `git pull`, trigger dengan satu command:
-  - `gh workflow run docker-deploy.yml --ref main`
-- Jika belum login GitHub CLI, lakukan sekali saja:
-  - `gh auth login`
-- Cek status run terbaru:
-  - `gh run list --workflow docker-deploy.yml --limit 1`
+## Variabel yang dipakai script
+
+Script membaca env dari `.env` (atau path pada `APP_ENV_FILE_PATH`) dan environment shell.
+
+### Wajib
+
+- `DB_DATABASE`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `DB_ROOT_PASSWORD`
+
+### Opsional (dengan default)
+
+- `APP_ENV_FILE_PATH` (default `.env`)
+- `APP_IMAGE_NAME` (default `coffee-shop-laravel-app`)
+- `APP_IMAGE_TAG` (default git short SHA terbaru)
+- `APP_CONTAINER_NAME` (default `coffee-shop-laravel`)
+- `APP_LOCAL_PORT` (default `8080`)
+- `APP_DOCKER_NETWORK` (default `coffee-shop-network`)
+- `MYSQL_IMAGE` (default `mysql:8.4`)
+- `MYSQL_CONTAINER_NAME` (default `coffee-shop-mysql`)
+- `MYSQL_VOLUME_NAME` (default `coffee-shop-mysql-data`)
+- `MYSQL_DATABASE` (fallback ke `DB_DATABASE`)
+- `MYSQL_USER` (fallback ke `DB_USERNAME`)
+- `MYSQL_PASSWORD` (fallback ke `DB_PASSWORD`)
+- `MYSQL_ROOT_PASSWORD` (fallback ke `DB_ROOT_PASSWORD`)
+
+## Yang dilakukan script deploy
+
+1. Build image aplikasi dari source terbaru.
+2. Membuat Docker network jika belum ada.
+3. Menjalankan MySQL container (atau start jika sudah ada).
+4. Menjalankan ulang container aplikasi dengan image terbaru.
+5. Menjalankan `php artisan migrate --force`.
+6. Membersihkan dangling image.
+
+## Catatan akses aplikasi
+
+- Container aplikasi bind ke `127.0.0.1:<APP_LOCAL_PORT>:80`.
+- Service tidak terbuka langsung ke internet.
+- Akses publik tetap lewat Nginx reverse proxy di VPS.
