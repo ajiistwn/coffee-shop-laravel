@@ -26,15 +26,17 @@ RUN npm ci
 COPY . .
 COPY --from=composer-builder /app/vendor ./vendor
 
-# Laravel butuh .env + direktori storage agar php artisan bisa boot
-# DB_CONNECTION=sqlite agar tidak perlu koneksi MySQL saat build
-RUN cp .env.example .env \
+# Laravel butuh .env + direktori storage agar php artisan bisa boot saat build
+# APP_KEY dibuat langsung, DB_CONNECTION=sqlite agar tidak perlu MySQL saat build
+RUN php -r "echo 'APP_KEY=base64:' . base64_encode(random_bytes(32)) . PHP_EOL;" > .env \
     && mkdir -p storage/logs \
                storage/framework/cache \
                storage/framework/sessions \
                storage/framework/views \
                bootstrap/cache \
-    && DB_CONNECTION=sqlite npm run build
+    && APP_KEY=$(grep APP_KEY .env | cut -d= -f2-) \
+       DB_CONNECTION=sqlite \
+       npm run build
 
 FROM php:8.4-apache
 WORKDIR /var/www/html

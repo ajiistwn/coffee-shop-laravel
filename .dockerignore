@@ -8,7 +8,6 @@ storage/framework/sessions
 storage/framework/testing
 storage/framework/views
 .env
-.env.*
 npm-debug.log
 yarn-error.log
 docker-compose*.yml
