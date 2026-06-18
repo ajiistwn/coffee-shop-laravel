@@ -1,4 +1,5 @@
 import { AppSidebar } from '@/components/app-sidebar';
+import { Badge } from '@/components/ui/badge';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -7,10 +8,8 @@ import {
 } from '@/components/ui/breadcrumb';
 import {
     Card,
-    CardAction,
     CardContent,
     CardDescription,
-    CardFooter,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
@@ -34,158 +33,235 @@ import {
     SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { TrendingDown, TrendingUp } from 'lucide-react';
-import React from 'react';
-import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
+import { Head } from '@inertiajs/react';
+import {
+    ClipboardList,
+    CreditCard,
+    PackageCheck,
+    ReceiptText,
+    TrendingDown,
+    TrendingUp,
+    Wallet,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import {
+    Area,
+    AreaChart,
+    Bar,
+    BarChart,
+    CartesianGrid,
+    XAxis,
+    YAxis,
+} from 'recharts';
 
-// Simple hook to detect mobile screen size
-function useIsMobile() {
-    const [isMobile, setIsMobile] = React.useState(
-        typeof window !== 'undefined' ? window.innerWidth < 768 : false,
-    );
+type Summary = {
+    totalRevenue: number;
+    todayRevenue: number;
+    todayOrders: number;
+    pendingOrders: number;
+    averageOrderValue: number;
+    revenueTrend: number;
+    ordersTrend: number;
+};
 
-    React.useEffect(() => {
-        function handleResize() {
-            setIsMobile(window.innerWidth < 768);
-        }
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+type ChartData = {
+    date: string;
+    revenue: number;
+    orders: number;
+};
 
-    return isMobile;
+type StatusBreakdown = {
+    status: string;
+    total: number;
+};
+
+type TopProduct = {
+    name: string;
+    quantity: number;
+    revenue: number;
+};
+
+type RecentOrder = {
+    id: number;
+    name: string;
+    total: number;
+    payment_status: string;
+    status: string;
+    created_at: string;
+};
+
+type DashboardProps = {
+    summary: Summary;
+    chartData: ChartData[];
+    statusBreakdown: StatusBreakdown[];
+    topProducts: TopProduct[];
+    recentOrders: RecentOrder[];
+};
+
+const revenueChartConfig = {
+    revenue: {
+        label: 'Omzet',
+        color: 'var(--chart-1)',
+    },
+    orders: {
+        label: 'Pesanan',
+        color: 'var(--chart-2)',
+    },
+} satisfies ChartConfig;
+
+const productChartConfig = {
+    quantity: {
+        label: 'Terjual',
+        color: 'var(--chart-1)',
+    },
+} satisfies ChartConfig;
+
+const statusLabels: Record<string, string> = {
+    pending: 'Menunggu',
+    preparing: 'Diproses',
+    completed: 'Selesai',
+    cancelled: 'Dibatalkan',
+};
+
+const paymentStatusLabels: Record<string, string> = {
+    paid: 'Lunas',
+    pending: 'Menunggu',
+    failed: 'Gagal',
+};
+
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0,
+    }).format(value);
 }
 
-export default function Page() {
-    const chartData = [
-        { date: '2024-04-01', desktop: 222, mobile: 150 },
-        { date: '2024-04-02', desktop: 97, mobile: 180 },
-        { date: '2024-04-03', desktop: 167, mobile: 120 },
-        { date: '2024-04-04', desktop: 242, mobile: 260 },
-        { date: '2024-04-05', desktop: 373, mobile: 290 },
-        { date: '2024-04-06', desktop: 301, mobile: 340 },
-        { date: '2024-04-07', desktop: 245, mobile: 180 },
-        { date: '2024-04-08', desktop: 409, mobile: 320 },
-        { date: '2024-04-09', desktop: 59, mobile: 110 },
-        { date: '2024-04-10', desktop: 261, mobile: 190 },
-        { date: '2024-04-11', desktop: 327, mobile: 350 },
-        { date: '2024-04-12', desktop: 292, mobile: 210 },
-        { date: '2024-04-13', desktop: 342, mobile: 380 },
-        { date: '2024-04-14', desktop: 137, mobile: 220 },
-        { date: '2024-04-15', desktop: 120, mobile: 170 },
-        { date: '2024-04-16', desktop: 138, mobile: 190 },
-        { date: '2024-04-17', desktop: 446, mobile: 360 },
-        { date: '2024-04-18', desktop: 364, mobile: 410 },
-        { date: '2024-04-19', desktop: 243, mobile: 180 },
-        { date: '2024-04-20', desktop: 89, mobile: 150 },
-        { date: '2024-04-21', desktop: 137, mobile: 200 },
-        { date: '2024-04-22', desktop: 224, mobile: 170 },
-        { date: '2024-04-23', desktop: 138, mobile: 230 },
-        { date: '2024-04-24', desktop: 387, mobile: 290 },
-        { date: '2024-04-25', desktop: 215, mobile: 250 },
-        { date: '2024-04-26', desktop: 75, mobile: 130 },
-        { date: '2024-04-27', desktop: 383, mobile: 420 },
-        { date: '2024-04-28', desktop: 122, mobile: 180 },
-        { date: '2024-04-29', desktop: 315, mobile: 240 },
-        { date: '2024-04-30', desktop: 454, mobile: 380 },
-        { date: '2024-05-01', desktop: 165, mobile: 220 },
-        { date: '2024-05-02', desktop: 293, mobile: 310 },
-        { date: '2024-05-03', desktop: 247, mobile: 190 },
-        { date: '2024-05-04', desktop: 385, mobile: 420 },
-        { date: '2024-05-05', desktop: 481, mobile: 390 },
-        { date: '2024-05-06', desktop: 498, mobile: 520 },
-        { date: '2024-05-07', desktop: 388, mobile: 300 },
-        { date: '2024-05-08', desktop: 149, mobile: 210 },
-        { date: '2024-05-09', desktop: 227, mobile: 180 },
-        { date: '2024-05-10', desktop: 293, mobile: 330 },
-        { date: '2024-05-11', desktop: 335, mobile: 270 },
-        { date: '2024-05-12', desktop: 197, mobile: 240 },
-        { date: '2024-05-13', desktop: 197, mobile: 160 },
-        { date: '2024-05-14', desktop: 448, mobile: 490 },
-        { date: '2024-05-15', desktop: 473, mobile: 380 },
-        { date: '2024-05-16', desktop: 338, mobile: 400 },
-        { date: '2024-05-17', desktop: 499, mobile: 420 },
-        { date: '2024-05-18', desktop: 315, mobile: 350 },
-        { date: '2024-05-19', desktop: 235, mobile: 180 },
-        { date: '2024-05-20', desktop: 177, mobile: 230 },
-        { date: '2024-05-21', desktop: 82, mobile: 140 },
-        { date: '2024-05-22', desktop: 81, mobile: 120 },
-        { date: '2024-05-23', desktop: 252, mobile: 290 },
-        { date: '2024-05-24', desktop: 294, mobile: 220 },
-        { date: '2024-05-25', desktop: 201, mobile: 250 },
-        { date: '2024-05-26', desktop: 213, mobile: 170 },
-        { date: '2024-05-27', desktop: 420, mobile: 460 },
-        { date: '2024-05-28', desktop: 233, mobile: 190 },
-        { date: '2024-05-29', desktop: 78, mobile: 130 },
-        { date: '2024-05-30', desktop: 340, mobile: 280 },
-        { date: '2024-05-31', desktop: 178, mobile: 230 },
-        { date: '2024-06-01', desktop: 178, mobile: 200 },
-        { date: '2024-06-02', desktop: 470, mobile: 410 },
-        { date: '2024-06-03', desktop: 103, mobile: 160 },
-        { date: '2024-06-04', desktop: 439, mobile: 380 },
-        { date: '2024-06-05', desktop: 88, mobile: 140 },
-        { date: '2024-06-06', desktop: 294, mobile: 250 },
-        { date: '2024-06-07', desktop: 323, mobile: 370 },
-        { date: '2024-06-08', desktop: 385, mobile: 320 },
-        { date: '2024-06-09', desktop: 438, mobile: 480 },
-        { date: '2024-06-10', desktop: 155, mobile: 200 },
-        { date: '2024-06-11', desktop: 92, mobile: 150 },
-        { date: '2024-06-12', desktop: 492, mobile: 420 },
-        { date: '2024-06-13', desktop: 81, mobile: 130 },
-        { date: '2024-06-14', desktop: 426, mobile: 380 },
-        { date: '2024-06-15', desktop: 307, mobile: 350 },
-        { date: '2024-06-16', desktop: 371, mobile: 310 },
-        { date: '2024-06-17', desktop: 475, mobile: 520 },
-        { date: '2024-06-18', desktop: 107, mobile: 170 },
-        { date: '2024-06-19', desktop: 341, mobile: 290 },
-        { date: '2024-06-20', desktop: 408, mobile: 450 },
-        { date: '2024-06-21', desktop: 169, mobile: 210 },
-        { date: '2024-06-22', desktop: 317, mobile: 270 },
-        { date: '2024-06-23', desktop: 480, mobile: 530 },
-        { date: '2024-06-24', desktop: 132, mobile: 180 },
-        { date: '2024-06-25', desktop: 141, mobile: 190 },
-        { date: '2024-06-26', desktop: 434, mobile: 380 },
-        { date: '2024-06-27', desktop: 448, mobile: 490 },
-        { date: '2024-06-28', desktop: 149, mobile: 200 },
-        { date: '2024-06-29', desktop: 103, mobile: 160 },
-        { date: '2024-06-30', desktop: 446, mobile: 400 },
-    ];
+function formatNumber(value: number) {
+    return new Intl.NumberFormat('id-ID').format(value);
+}
 
-    const chartConfig = {
-        visitors: {
-            label: 'Visitors',
-        },
-        desktop: {
-            label: 'Desktop',
-            color: 'var(--primary)',
-        },
-        mobile: {
-            label: 'Mobile',
-            color: 'var(--primary)',
-        },
-    } satisfies ChartConfig;
-
-    const isMobile = useIsMobile();
-    const [timeRange, setTimeRange] = React.useState('1h');
-    React.useEffect(() => {
-        if (isMobile) {
-            setTimeRange('7d');
-        }
-    }, [isMobile]);
-    const filteredData = chartData.filter((item) => {
-        const date = new Date(item.date);
-        const referenceDate = new Date('2024-06-30');
-        let daysToSubtract = 90;
-        if (timeRange === '30d') {
-            daysToSubtract = 30;
-        } else if (timeRange === '7d') {
-            daysToSubtract = 7;
-        }
-        const startDate = new Date(referenceDate);
-        startDate.setDate(startDate.getDate() - daysToSubtract);
-        return date >= startDate;
+function formatDate(value: string) {
+    return new Date(value).toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
     });
+}
+
+function formatDateTime(value: string) {
+    return new Date(value).toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function getTrendBadge(trend: number) {
+    const isPositive = trend >= 0;
+    const Icon = isPositive ? TrendingUp : TrendingDown;
+
+    return (
+        <Badge variant="outline" className="gap-1">
+            <Icon className="h-3.5 w-3.5" />
+            {isPositive ? '+' : ''}
+            {trend}%
+        </Badge>
+    );
+}
+
+function getOrderStatusBadge(status: string) {
+    if (status === 'completed') {
+        return <Badge className="bg-green-600 text-white">Selesai</Badge>;
+    }
+
+    if (status === 'preparing') {
+        return <Badge className="bg-blue-600 text-white">Diproses</Badge>;
+    }
+
+    if (status === 'cancelled') {
+        return <Badge className="bg-red-600 text-white">Dibatalkan</Badge>;
+    }
+
+    return <Badge className="bg-yellow-600 text-white">Menunggu</Badge>;
+}
+
+function getPaymentStatusBadge(status: string) {
+    if (status === 'paid') {
+        return (
+            <Badge className="bg-green-600 text-white">
+                {paymentStatusLabels[status]}
+            </Badge>
+        );
+    }
+
+    if (status === 'failed') {
+        return (
+            <Badge className="bg-red-600 text-white">
+                {paymentStatusLabels[status]}
+            </Badge>
+        );
+    }
+
+    return (
+        <Badge className="bg-yellow-600 text-white">
+            {paymentStatusLabels[status] ?? status}
+        </Badge>
+    );
+}
+
+function SummaryCard({
+    title,
+    value,
+    description,
+    icon: Icon,
+    trend,
+}: {
+    title: string;
+    value: string;
+    description: string;
+    icon: typeof Wallet;
+    trend?: number;
+}) {
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                <div className="space-y-1">
+                    <CardDescription>{title}</CardDescription>
+                    <CardTitle className="text-2xl font-semibold tabular-nums">
+                        {value}
+                    </CardTitle>
+                </div>
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                    <Icon className="h-5 w-5" />
+                </div>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                <span>{description}</span>
+                {trend !== undefined && getTrendBadge(trend)}
+            </CardContent>
+        </Card>
+    );
+}
+
+export default function Dashboard({
+    summary,
+    chartData,
+    statusBreakdown,
+    topProducts,
+    recentOrders,
+}: DashboardProps) {
+    const [timeRange, setTimeRange] = useState('30d');
+
+    const filteredChartData = useMemo(() => {
+        const days = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : 30;
+
+        return chartData.slice(-days);
+    }, [chartData, timeRange]);
+
     return (
         <SidebarProvider>
+            <Head title="Dashboard Laporan" />
             <AppSidebar />
             <SidebarInset>
                 <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
@@ -198,142 +274,119 @@ export default function Page() {
                         <Breadcrumb>
                             <BreadcrumbList>
                                 <BreadcrumbItem className="hidden md:block">
-                                    <BreadcrumbLink href="#">
-                                        Building Your Application
+                                    <BreadcrumbLink href="/dashboard">
+                                        Dashboard Laporan
                                     </BreadcrumbLink>
                                 </BreadcrumbItem>
-                                {/* <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Data Fetching</BreadcrumbPage>
-                </BreadcrumbItem> */}
                             </BreadcrumbList>
                         </Breadcrumb>
                     </div>
                 </header>
-                <div className="flex flex-1 flex-col pt-0">
-                    <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/1 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 dark:*:data-[slot=card]:bg-card">
-                        <Card className="@container/card">
-                            <CardHeader>
-                                <CardDescription>Total Revenue</CardDescription>
-                                <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                    1.250.000
-                                </CardTitle>
-                                {/* <CardAction>
-                                    <Badge variant="outline">
-                                        <TrendingUp />
-                                        +12.5%
-                                    </Badge>
-                                </CardAction> */}
-                            </CardHeader>
-                            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-                                <div className="line-clamp-1 flex gap-2 font-medium">
-                                    Daily turnover{' '}
-                                    <TrendingUp className="size-4" />
-                                </div>
-                                <div className="text-muted-foreground">
-                                    Today's turnover since opening
-                                </div>
-                            </CardFooter>
-                        </Card>
-                        <Card className="@container/card">
-                            <CardHeader>
-                                <CardDescription>
-                                    Total Customers
-                                </CardDescription>
-                                <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                    234
-                                </CardTitle>
-                                <CardAction>
-                                    {/* <Badge variant="outline">
-                                        <TrendingDown />
-                                        -20%
-                                    </Badge> */}
-                                </CardAction>
-                            </CardHeader>
-                            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-                                <div className="line-clamp-1 flex gap-2 font-medium">
-                                    Number of daily customers{' '}
-                                    <TrendingDown className="size-4" />
-                                </div>
-                                <div className="text-muted-foreground">
-                                    Number of daily customers since opening
-                                </div>
-                            </CardFooter>
-                        </Card>
+
+                <div className="flex flex-1 flex-col gap-5 p-4 pt-0">
+                    <div>
+                        <h1 className="text-2xl font-bold">
+                            Ringkasan Penjualan
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                            Laporan dihitung dari data pesanan dan pembayaran
+                            yang tersimpan.
+                        </p>
                     </div>
-                    <div className="px-4 pt-5 lg:px-4">
-                        <Card className="@container/card">
-                            <CardHeader>
-                                <CardTitle>Total Visitors</CardTitle>
-                                <CardDescription>
-                                    <span className="hidden @[540px]/card:block">
-                                        Total for the last 3 months
-                                    </span>
-                                    <span className="@[540px]/card:hidden">
-                                        Last 3 months
-                                    </span>
-                                </CardDescription>
-                                <CardAction>
+
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <SummaryCard
+                            title="Total Omzet"
+                            value={formatCurrency(summary.totalRevenue)}
+                            description="Semua pesanan yang sudah lunas"
+                            icon={Wallet}
+                        />
+                        <SummaryCard
+                            title="Omzet Hari Ini"
+                            value={formatCurrency(summary.todayRevenue)}
+                            description="Dibandingkan kemarin"
+                            icon={ReceiptText}
+                            trend={summary.revenueTrend}
+                        />
+                        <SummaryCard
+                            title="Pesanan Hari Ini"
+                            value={formatNumber(summary.todayOrders)}
+                            description="Jumlah pesanan masuk hari ini"
+                            icon={ClipboardList}
+                            trend={summary.ordersTrend}
+                        />
+                        <SummaryCard
+                            title="Rata-rata Transaksi"
+                            value={formatCurrency(summary.averageOrderValue)}
+                            description={`${formatNumber(summary.pendingOrders)} pesanan masih menunggu`}
+                            icon={CreditCard}
+                        />
+                    </div>
+
+                    <div className="grid gap-4 xl:grid-cols-3">
+                        <Card className="xl:col-span-2">
+                            <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <CardTitle>
+                                        Grafik Omzet dan Pesanan
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Pergerakan omzet lunas dan jumlah
+                                        pesanan berdasarkan tanggal.
+                                    </CardDescription>
+                                </div>
+                                <div>
                                     <ToggleGroup
                                         type="single"
                                         value={timeRange}
-                                        onValueChange={setTimeRange}
+                                        onValueChange={(value) => {
+                                            if (value) {
+                                                setTimeRange(value);
+                                            }
+                                        }}
                                         variant="outline"
-                                        className="hidden *:data-[slot=toggle-group-item]:!px-4 @[767px]/card:flex"
+                                        className="hidden md:flex"
                                     >
-                                        <ToggleGroupItem value="90d">
-                                            Last 3 months
-                                        </ToggleGroupItem>
                                         <ToggleGroupItem value="30d">
-                                            Last 30 days
+                                            30 Hari
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem value="14d">
+                                            14 Hari
                                         </ToggleGroupItem>
                                         <ToggleGroupItem value="7d">
-                                            Last 7 days
+                                            7 Hari
                                         </ToggleGroupItem>
                                     </ToggleGroup>
                                     <Select
                                         value={timeRange}
                                         onValueChange={setTimeRange}
                                     >
-                                        <SelectTrigger
-                                            className="flex w-40 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[767px]/card:hidden"
-                                            // size="sm"
-                                            aria-label="Select a value"
-                                        >
-                                            <SelectValue placeholder="Last 3 months" />
+                                        <SelectTrigger className="w-36 md:hidden">
+                                            <SelectValue placeholder="Rentang" />
                                         </SelectTrigger>
-                                        <SelectContent className="rounded-xl">
-                                            <SelectItem
-                                                value="90d"
-                                                className="rounded-lg"
-                                            >
-                                                Last 3 months
+                                        <SelectContent>
+                                            <SelectItem value="30d">
+                                                30 Hari
                                             </SelectItem>
-                                            <SelectItem
-                                                value="30d"
-                                                className="rounded-lg"
-                                            >
-                                                Last 30 days
+                                            <SelectItem value="14d">
+                                                14 Hari
                                             </SelectItem>
-                                            <SelectItem
-                                                value="7d"
-                                                className="rounded-lg"
-                                            >
-                                                Last 7 days
+                                            <SelectItem value="7d">
+                                                7 Hari
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
-                                </CardAction>
+                                </div>
                             </CardHeader>
-                            <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+                            <CardContent>
                                 <ChartContainer
-                                    config={chartConfig}
-                                    className="aspect-auto h-[250px] w-full"
+                                    config={revenueChartConfig}
+                                    className="h-[320px] w-full"
                                 >
-                                    <AreaChart data={filteredData}>
+                                    <AreaChart data={filteredChartData}>
                                         <defs>
                                             <linearGradient
-                                                id="fillDesktop"
+                                                id="fillRevenue"
                                                 x1="0"
                                                 y1="0"
                                                 x2="0"
@@ -341,31 +394,13 @@ export default function Page() {
                                             >
                                                 <stop
                                                     offset="5%"
-                                                    stopColor="var(--color-desktop)"
-                                                    stopOpacity={1.0}
-                                                />
-                                                <stop
-                                                    offset="95%"
-                                                    stopColor="var(--color-desktop)"
-                                                    stopOpacity={0.1}
-                                                />
-                                            </linearGradient>
-                                            <linearGradient
-                                                id="fillMobile"
-                                                x1="0"
-                                                y1="0"
-                                                x2="0"
-                                                y2="1"
-                                            >
-                                                <stop
-                                                    offset="5%"
-                                                    stopColor="var(--color-mobile)"
+                                                    stopColor="var(--color-revenue)"
                                                     stopOpacity={0.8}
                                                 />
                                                 <stop
                                                     offset="95%"
-                                                    stopColor="var(--color-mobile)"
-                                                    stopOpacity={0.1}
+                                                    stopColor="var(--color-revenue)"
+                                                    stopOpacity={0.05}
                                                 />
                                             </linearGradient>
                                         </defs>
@@ -375,58 +410,191 @@ export default function Page() {
                                             tickLine={false}
                                             axisLine={false}
                                             tickMargin={8}
-                                            minTickGap={32}
-                                            tickFormatter={(value) => {
-                                                const date = new Date(value);
-                                                return date.toLocaleDateString(
-                                                    'en-US',
-                                                    {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                    },
-                                                );
-                                            }}
+                                            tickFormatter={formatDate}
+                                        />
+                                        <YAxis
+                                            yAxisId="revenue"
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickMargin={8}
+                                            tickFormatter={(value) =>
+                                                `${Number(value) / 1000}rb`
+                                            }
+                                        />
+                                        <YAxis
+                                            yAxisId="orders"
+                                            orientation="right"
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickMargin={8}
                                         />
                                         <ChartTooltip
                                             cursor={false}
                                             content={
                                                 <ChartTooltipContent
-                                                    labelFormatter={(value) => {
-                                                        return new Date(
-                                                            value,
-                                                        ).toLocaleDateString(
-                                                            'en-US',
-                                                            {
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                            },
-                                                        );
-                                                    }}
                                                     indicator="dot"
+                                                    labelFormatter={(value) =>
+                                                        formatDate(
+                                                            String(value),
+                                                        )
+                                                    }
                                                 />
                                             }
                                         />
                                         <Area
-                                            dataKey="mobile"
+                                            yAxisId="revenue"
+                                            dataKey="revenue"
                                             type="natural"
-                                            fill="url(#fillMobile)"
-                                            stroke="var(--color-mobile)"
-                                            stackId="a"
+                                            fill="url(#fillRevenue)"
+                                            stroke="var(--color-revenue)"
                                         />
                                         <Area
-                                            dataKey="desktop"
+                                            yAxisId="orders"
+                                            dataKey="orders"
                                             type="natural"
-                                            fill="url(#fillDesktop)"
-                                            stroke="var(--color-desktop)"
-                                            stackId="a"
+                                            fill="transparent"
+                                            stroke="var(--color-orders)"
                                         />
                                     </AreaChart>
                                 </ChartContainer>
                             </CardContent>
                         </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Status Pesanan</CardTitle>
+                                <CardDescription>
+                                    Jumlah pesanan berdasarkan proses saat ini.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {statusBreakdown.map((item) => (
+                                    <div
+                                        key={item.status}
+                                        className="flex items-center justify-between rounded-lg border p-3"
+                                    >
+                                        <div>
+                                            <p className="font-medium">
+                                                {statusLabels[item.status] ??
+                                                    item.status}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                Total pesanan
+                                            </p>
+                                        </div>
+                                        <Badge variant="secondary">
+                                            {formatNumber(item.total)}
+                                        </Badge>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
                     </div>
 
-                    <div className="min-h-[100vh] flex-1 rounded-xl bg-muted/50 md:min-h-min" />
+                    <div className="grid gap-4 xl:grid-cols-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Produk Terlaris</CardTitle>
+                                <CardDescription>
+                                    Berdasarkan jumlah item dari pesanan lunas.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {topProducts.length === 0 ? (
+                                    <p className="py-10 text-center text-sm text-muted-foreground">
+                                        Belum ada data produk terjual.
+                                    </p>
+                                ) : (
+                                    <ChartContainer
+                                        config={productChartConfig}
+                                        className="h-[280px] w-full"
+                                    >
+                                        <BarChart data={topProducts}>
+                                            <CartesianGrid vertical={false} />
+                                            <XAxis
+                                                dataKey="name"
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tickMargin={8}
+                                                interval={0}
+                                                tickFormatter={(value) =>
+                                                    String(value).length > 12
+                                                        ? `${String(value).slice(0, 12)}...`
+                                                        : String(value)
+                                                }
+                                            />
+                                            <YAxis
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tickMargin={8}
+                                            />
+                                            <ChartTooltip
+                                                cursor={false}
+                                                content={
+                                                    <ChartTooltipContent indicator="dot" />
+                                                }
+                                            />
+                                            <Bar
+                                                dataKey="quantity"
+                                                fill="var(--color-quantity)"
+                                                radius={[6, 6, 0, 0]}
+                                            />
+                                        </BarChart>
+                                    </ChartContainer>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Pesanan Terbaru</CardTitle>
+                                <CardDescription>
+                                    Aktivitas pesanan terakhir yang masuk.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {recentOrders.length === 0 ? (
+                                    <p className="py-10 text-center text-sm text-muted-foreground">
+                                        Belum ada pesanan.
+                                    </p>
+                                ) : (
+                                    recentOrders.map((order) => (
+                                        <div
+                                            key={order.id}
+                                            className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <PackageCheck className="h-4 w-4 text-muted-foreground" />
+                                                    <p className="font-medium">
+                                                        #{order.id} -{' '}
+                                                        {order.name}
+                                                    </p>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDateTime(
+                                                        order.created_at,
+                                                    )}{' '}
+                                                    ·{' '}
+                                                    {formatCurrency(
+                                                        order.total,
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {getOrderStatusBadge(
+                                                    order.status,
+                                                )}
+                                                {getPaymentStatusBadge(
+                                                    order.payment_status,
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </SidebarInset>
         </SidebarProvider>

@@ -10,7 +10,9 @@ import {
 import AppLayout from '@/layouts/app/app-header-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import axios from 'axios';
+import { RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 type Order = {
     id: number;
@@ -42,24 +44,84 @@ type PageProps = {
     cartCount: number;
 };
 
+const POLLING_INTERVAL_MS = 3000;
+
+function getCartToken() {
+    const queryToken = new URLSearchParams(window.location.search).get(
+        'cart_token',
+    );
+
+    return queryToken ?? localStorage.getItem('cart_token') ?? '';
+}
+
+function normalizeOrders(orders: Order[]) {
+    return orders.map((order) => ({
+        ...order,
+        order_items: order.order_items || [],
+        payments: order.payments || [],
+    }));
+}
+
 export default function Pesanan() {
     const { orders, cartCount } = usePage<PageProps>().props;
-    console.log(orders);
+    const [customerOrders, setCustomerOrders] = useState<Order[]>(() =>
+        normalizeOrders(orders),
+    );
+    const [customerCartCount, setCustomerCartCount] = useState(cartCount);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [fetchError, setFetchError] = useState('');
+    const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalContent, setModalContent] = useState<{
         title: string;
         message: string;
     }>({ title: '', message: '' });
-    // Validasi data orders
-    const safeOrders = orders.map((order) => ({
-        ...order,
-        order_items: order.order_items || [], // Fallback jika order_items undefined
-    }));
 
-    const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
     useEffect(() => {
-        setFilteredOrders(safeOrders);
-    }, [safeOrders]);
+        setCustomerOrders(normalizeOrders(orders));
+        setCustomerCartCount(cartCount);
+    }, [orders, cartCount]);
+
+    const fetchCustomerOrders = useCallback(async () => {
+        const token = getCartToken();
+
+        if (!token) {
+            setFetchError('Token pesanan tidak ditemukan.');
+            return;
+        }
+
+        setIsRefreshing(true);
+        setFetchError('');
+
+        try {
+            const response = await axios.get('/pesanan/realtime', {
+                params: {
+                    cart_token: token,
+                },
+            });
+
+            setCustomerOrders(normalizeOrders(response.data.orders ?? []));
+            setCustomerCartCount(response.data.cartCount ?? 0);
+            setLastUpdatedAt(new Date());
+        } catch (error) {
+            console.error('Error fetching customer orders:', error);
+            setFetchError(
+                'Gagal memperbarui riwayat pesanan. Data akan dicoba lagi otomatis.',
+            );
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCustomerOrders();
+
+        const intervalId = window.setInterval(() => {
+            fetchCustomerOrders();
+        }, POLLING_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, [fetchCustomerOrders]);
 
     const formatPrice = (price: number) =>
         new Intl.NumberFormat('id-ID', {
@@ -118,23 +180,46 @@ export default function Pesanan() {
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs} cartCount={cartCount}>
+        <AppLayout breadcrumbs={breadcrumbs} cartCount={customerCartCount}>
             <Head title="Riwayat Pesanan" />
-            <div className="flex min-h-screen flex-col bg-[#FDFDFC] p-6 text-[#1b1b18] dark:bg-[#0a0a0a]">
+            <div className="flex min-h-screen flex-col bg-background p-6 text-foreground">
                 {/* Header */}
-                <h1 className="mb-6 text-3xl font-bold">Riwayat Pesanan</h1>
+                <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold">Riwayat Pesanan</h1>
+                        <p className="text-sm text-muted-foreground">
+                            Status pesanan diperbarui otomatis setiap 3 detik.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <RefreshCw
+                            className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                        />
+                        <span>
+                            {lastUpdatedAt
+                                ? `Terakhir diperbarui ${lastUpdatedAt.toLocaleTimeString('id-ID')}`
+                                : 'Memuat data...'}
+                        </span>
+                    </div>
+                </div>
+
+                {fetchError && (
+                    <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {fetchError}
+                    </div>
+                )}
 
                 {/* List Orders */}
                 <div className="space-y-4">
-                    {filteredOrders.length === 0 ? (
+                    {customerOrders.length === 0 ? (
                         <p className="text-center text-muted-foreground">
                             Tidak ada riwayat pesanan.
                         </p>
                     ) : (
-                        filteredOrders.map((order) => (
+                        customerOrders.map((order) => (
                             <Card
                                 key={order.id}
-                                className="spaca-y-0 gap-0 shadow-sm"
+                                className="spaca-y-0 gap-0 shadow-sm transition hover:bg-accent/40"
                                 onClick={() => handleStatusAction(order)}
                             >
                                 <CardHeader>

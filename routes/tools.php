@@ -29,6 +29,8 @@ Route::prefix('tools')->middleware(['auth', 'verified'])->group(function () {
 
     Route::get('orders/trashed', [OrderController::class, 'trashed']);
     Route::resource('orders', OrderController::class);
+    Route::post('orders/{id}/restore', [OrderController::class, 'restore']);
+    Route::delete('orders/{id}/force-delete', [OrderController::class, 'forceDelete']);
 });
 
 

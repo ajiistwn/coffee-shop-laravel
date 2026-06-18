@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { NavMain } from '@/components/nav-main';
 // import { NavProjects } from "@/components/nav-projects"
 import AppLogoIcon from '@/components/app-logo-icon';
@@ -157,6 +158,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {/* <NavProjects projects={data.projects} /> */}
             </SidebarContent>
             <SidebarFooter>
+                <div className="flex items-center justify-between px-2 py-1 text-sm font-medium text-sidebar-foreground">
+                    <span>Tema</span>
+                    <AppearanceToggleDropdown />
+                </div>
                 <NavUser user={data.user} />
             </SidebarFooter>
             <SidebarRail />

@@ -117,7 +117,7 @@ export default function Menu() {
     return (
         <AppLayout breadcrumbs={breadcrumbs} cartCount={cartCount}>
             <Head title={`Menu`} />
-            <div className="flex min-h-screen flex-col bg-[#FDFDFC] p-4 text-[#1b1b18] dark:bg-[#0a0a0a]">
+            <div className="flex min-h-screen flex-col bg-background p-4 text-foreground">
                 <div className="flex flex-1 flex-col gap-4 p-0 pt-0">
                     {/* Search & Filter */}
                     <div className="flex flex-col gap-4">
@@ -184,7 +184,7 @@ export default function Menu() {
                                         {catProducts.map((product) => (
                                             <Card
                                                 key={product.id}
-                                                className="cursor-pointer gap-0 py-4 transition hover:shadow-lg"
+                                                className="cursor-pointer gap-0 py-4 transition hover:bg-accent/40 hover:shadow-lg"
                                                 onClick={() =>
                                                     (window.location.href = `/menu/${product.id}`)
                                                 }
@@ -264,7 +264,7 @@ export default function Menu() {
                     >
                         <ShoppingCart className="h-5 w-5" />
                         Keranjang
-                        <Badge className="bg-white font-bold text-primary">
+                        <Badge className="bg-primary-foreground font-bold text-primary">
                             {cartCount}
                         </Badge>
                     </Button>

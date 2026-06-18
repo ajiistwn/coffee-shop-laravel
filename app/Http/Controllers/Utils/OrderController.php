@@ -19,10 +19,11 @@ class OrderController extends Controller
         $search = $request->input('search');
         $status = $request->input('status');
         $trashed = $request->input('trashed');
-        $perPage = $request->input('per_page', 10); // Default 10 items per page
+        $perPage = min(max((int) $request->input('per_page', 10), 1), 100);
 
         // Query dasar
-        $query = Order::with(['user', 'orderItems', 'payments']);
+        $query = Order::with(['user', 'orderItems.product', 'orderItems.variant', 'payments'])
+            ->latest();
 
         // Filter berdasarkan search
         if ($search) {

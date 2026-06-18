@@ -1,3 +1,4 @@
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Icon } from '@/components/icon';
 import { Button } from '@/components/ui/button';
@@ -40,8 +41,7 @@ const rightNavItems: NavItem[] = [
     // },
 ];
 
-const activeItemStyles =
-    'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
+const activeItemStyles = 'bg-accent text-accent-foreground';
 
 interface AppHeaderProps {
     breadcrumbs?: BreadcrumbItem[];
@@ -115,6 +115,12 @@ export function AppHeader({ breadcrumbs, cartCount = 0 }: AppHeaderProps) {
                                         </div>
 
                                         <div className="flex flex-col space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium">
+                                                    Tema
+                                                </span>
+                                                <AppearanceToggleDropdown />
+                                            </div>
                                             {rightNavItems.map((item) => (
                                                 <a
                                                     key={item.title}
@@ -176,7 +182,7 @@ export function AppHeader({ breadcrumbs, cartCount = 0 }: AppHeaderProps) {
                                             {item.title}
                                         </Link>
                                         {isSameUrl(page.url, item.href) && (
-                                            <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
+                                            <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-primary"></div>
                                         )}
                                     </NavigationMenuItem>
                                 ))}
@@ -185,6 +191,7 @@ export function AppHeader({ breadcrumbs, cartCount = 0 }: AppHeaderProps) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
+                        <AppearanceToggleDropdown />
                         <div className="relative flex items-center space-x-1">
                             {/* <Button
                                 variant="ghost"

@@ -39,14 +39,24 @@ import {
     TableBody,
     TableCaption,
     TableCell,
-    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
 import axios from 'axios';
-import { MoreHorizontal } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+    MoreHorizontal,
+    PauseCircle,
+    PlayCircle,
+    RefreshCw,
+} from 'lucide-react';
+import {
+    type FormEvent,
+    type MouseEvent,
+    useCallback,
+    useEffect,
+    useState,
+} from 'react';
 
 type OrderType = {
     id: number | null;
@@ -56,6 +66,7 @@ type OrderType = {
     total?: number;
     order_items?: Array<OrderItemType>;
     payments?: Array<PaymentType>;
+    created_at?: string | null;
     deleted_at?: string | null;
     updated_at?: string | null;
 };
@@ -67,6 +78,12 @@ type OrderItemType = {
     qty: number;
     price: number;
     subtotal: number;
+    product?: {
+        name: string;
+    } | null;
+    variant?: {
+        name?: string | null;
+    } | null;
 };
 type PaymentType = {
     id: number | null;
@@ -75,6 +92,75 @@ type PaymentType = {
     amount: number;
     status: string;
 };
+
+type OrderFilters = {
+    search?: string;
+    status?: string;
+    trashed?: string;
+    page?: number;
+    perPage?: number;
+};
+
+const POLLING_INTERVAL_MS = 3000;
+
+function formatDateTime(value?: string | null) {
+    if (!value) {
+        return '-';
+    }
+
+    return new Date(value).toLocaleString('id-ID', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+}
+
+function formatCurrency(value?: number) {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0,
+    }).format(value ?? 0);
+}
+
+function getPaymentStatusBadge(status?: string) {
+    if (status === 'paid') {
+        return <Badge className="bg-green-500 px-2">Lunas</Badge>;
+    }
+
+    if (status === 'pending') {
+        return <Badge className="bg-yellow-500 px-2">Menunggu</Badge>;
+    }
+
+    if (status === 'failed') {
+        return <Badge className="bg-red-500 px-2">Gagal</Badge>;
+    }
+
+    return <Badge className="bg-gray-500 px-2">Tidak diketahui</Badge>;
+}
+
+function getOrderStatusBadge(status?: string) {
+    if (status === 'completed') {
+        return <Badge className="bg-green-500 px-2">Selesai</Badge>;
+    }
+
+    if (status === 'pending') {
+        return <Badge className="bg-yellow-500 px-2">Menunggu</Badge>;
+    }
+
+    if (status === 'preparing') {
+        return <Badge className="bg-blue-500 px-2">Diproses</Badge>;
+    }
+
+    if (status === 'cancelled') {
+        return <Badge className="bg-red-500 px-2">Dibatalkan</Badge>;
+    }
+
+    return <Badge className="bg-gray-500 px-2">Tidak diketahui</Badge>;
+}
 
 export default function Order() {
     const [paginationMeta, setPaginationMeta] = useState({
@@ -91,34 +177,53 @@ export default function Order() {
     const [selectedOrder, setSelectedOrder] = useState<OrderType | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isRealtimeEnabled, setIsRealtimeEnabled] = useState(true);
+    const [fetchError, setFetchError] = useState('');
+    const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-    async function fetchOrders(filters = {}) {
-        try {
-            const response = await axios.get('/tools/orders', {
-                params: {
-                    ...filters,
-                    page: currentPage,
-                    per_page: perPage,
-                },
-            });
-            console.log('Fetched orders:', response.data);
-            setOrders(response.data.data); // Data dari Laravel paginated
-            setPaginationMeta({
-                currentPage: response.data.current_page,
-                lastPage: response.data.last_page,
-                total: response.data.total,
-            });
-        } catch (error) {
-            console.error('Error fetching orders:', error);
-        }
-    }
-    const handleSearchSubmit = (e: React.FormEvent) => {
+    const fetchOrders = useCallback(
+        async (filters: OrderFilters = {}) => {
+            setIsRefreshing(true);
+            setFetchError('');
+
+            try {
+                const response = await axios.get('/tools/orders', {
+                    params: {
+                        search: filters.search ?? searchTerm,
+                        status: filters.status ?? statusFilter,
+                        trashed: filters.trashed ?? trashedFilter,
+                        page: filters.page ?? currentPage,
+                        per_page: filters.perPage ?? perPage,
+                    },
+                });
+                setOrders(response.data.data); // Data dari Laravel paginated
+                setPaginationMeta({
+                    currentPage: response.data.current_page,
+                    lastPage: response.data.last_page,
+                    total: response.data.total,
+                });
+                setLastUpdatedAt(new Date());
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+                setFetchError(
+                    'Gagal memuat data pesanan. Data akan dicoba lagi otomatis.',
+                );
+            } finally {
+                setIsRefreshing(false);
+            }
+        },
+        [currentPage, perPage, searchTerm, statusFilter, trashedFilter],
+    );
+
+    const handleSearchSubmit = (e: FormEvent) => {
         e.preventDefault();
         setCurrentPage(1); // Reset ke halaman pertama
         fetchOrders({
             search: searchTerm,
             status: statusFilter,
             trashed: trashedFilter,
+            page: 1,
         });
     };
 
@@ -129,6 +234,7 @@ export default function Order() {
             search: searchTerm,
             status: value,
             trashed: trashedFilter,
+            page: 1,
         });
     };
 
@@ -139,24 +245,39 @@ export default function Order() {
             search: searchTerm,
             status: statusFilter,
             trashed: value,
+            page: 1,
         });
     };
 
-    // Fetch categories on component mount
-    useState(() => {
+    useEffect(() => {
         fetchOrders();
-    });
+    }, [fetchOrders]);
 
     useEffect(() => {
-        const fetchData = async () => {
-            await fetchOrders({
-                search: searchTerm,
-                status: statusFilter,
-                trashed: trashedFilter,
-            });
-        };
-        fetchData();
-    }, [perPage, currentPage]);
+        if (!isRealtimeEnabled) {
+            return;
+        }
+
+        const intervalId = window.setInterval(() => {
+            fetchOrders();
+        }, POLLING_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, [fetchOrders, isRealtimeEnabled]);
+
+    useEffect(() => {
+        if (!selectedOrder?.id) {
+            return;
+        }
+
+        const updatedSelectedOrder = orders.find(
+            (order) => order.id === selectedOrder.id,
+        );
+
+        if (updatedSelectedOrder) {
+            setSelectedOrder(updatedSelectedOrder);
+        }
+    }, [orders, selectedOrder?.id]);
 
     return (
         <SidebarProvider>
@@ -173,7 +294,7 @@ export default function Order() {
                             <BreadcrumbList>
                                 <BreadcrumbItem className="hidden md:block">
                                     <BreadcrumbLink href="/order">
-                                        Orders
+                                        Pesanan
                                     </BreadcrumbLink>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -188,14 +309,14 @@ export default function Order() {
                         <div className="flex w-full flex-col gap-2 md:flex-row md:items-center md:gap-3">
                             {/* Search */}
                             <Input
-                                placeholder="Search category…"
+                                placeholder="Cari nama pelanggan..."
                                 className="w-full md:w-1/3"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                             {/* Submit search */}
                             <Button type="submit" className="w-full md:w-auto">
-                                Search
+                                Cari
                             </Button>
 
                             <Select
@@ -203,18 +324,18 @@ export default function Order() {
                                 onValueChange={handleStatusChange}
                             >
                                 <SelectTrigger className="w-full md:w-1/4">
-                                    <SelectValue placeholder="Filter status" />
+                                    <SelectValue placeholder="Filter pembayaran" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="null">
-                                        All Status
+                                        Semua Pembayaran
                                     </SelectItem>
-                                    <SelectItem value="paid">Paid</SelectItem>
+                                    <SelectItem value="paid">Lunas</SelectItem>
                                     <SelectItem value="pending">
-                                        Pending
+                                        Menunggu
                                     </SelectItem>
                                     <SelectItem value="failed">
-                                        Failed
+                                        Gagal
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -225,17 +346,17 @@ export default function Order() {
                                 onValueChange={handleTrashedChange}
                             >
                                 <SelectTrigger className="w-full md:w-1/4">
-                                    <SelectValue placeholder="Filter deleted" />
+                                    <SelectValue placeholder="Filter data dihapus" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="null">
-                                        Not Deleted Only
+                                        Hanya Aktif
                                     </SelectItem>
                                     <SelectItem value="only">
-                                        Soft Deleted Only
+                                        Hanya Terhapus
                                     </SelectItem>
                                     <SelectItem value="with">
-                                        Include Deleted
+                                        Termasuk Terhapus
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -248,7 +369,13 @@ export default function Order() {
                                     setSearchTerm('');
                                     setStatusFilter('');
                                     setTrashedFilter('');
-                                    fetchOrders({});
+                                    setCurrentPage(1);
+                                    fetchOrders({
+                                        search: '',
+                                        status: '',
+                                        trashed: '',
+                                        page: 1,
+                                    });
                                 }}
                             >
                                 Reset
@@ -264,7 +391,7 @@ export default function Order() {
                                     }}
                                 >
                                     <SelectTrigger className="w-32">
-                                        <SelectValue placeholder="Items per page" />
+                                        <SelectValue placeholder="Jumlah data" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="10">10</SelectItem>
@@ -277,6 +404,7 @@ export default function Order() {
 
                             <div className="flex gap-2">
                                 <Button
+                                    type="button"
                                     onClick={() =>
                                         setCurrentPage((prev) =>
                                             Math.max(prev - 1, 1),
@@ -284,13 +412,14 @@ export default function Order() {
                                     }
                                     disabled={currentPage === 1}
                                 >
-                                    Previous
+                                    Sebelumnya
                                 </Button>
-                                <span>
-                                    Page {currentPage} of{' '}
+                                <span className="flex items-center text-sm text-muted-foreground">
+                                    Halaman {currentPage} dari{' '}
                                     {paginationMeta.lastPage}
                                 </span>
                                 <Button
+                                    type="button"
                                     onClick={() =>
                                         setCurrentPage((prev) =>
                                             Math.min(
@@ -303,30 +432,108 @@ export default function Order() {
                                         currentPage === paginationMeta.lastPage
                                     }
                                 >
-                                    Next
+                                    Berikutnya
                                 </Button>
                             </div>
                         </div>
                     </form>
 
-                    <Table>
+                    <div className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-sm">
+                        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
+                            <div>
+                                <h2 className="text-lg font-semibold">
+                                    Daftar Pesanan
+                                </h2>
+                                <p className="text-sm text-muted-foreground">
+                                    Menampilkan data terbaru lebih dulu dan
+                                    realtime dapat dijeda saat berpindah
+                                    halaman.
+                                </p>
+                            </div>
+                            <div className="flex flex-col gap-2 md:items-end">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <RefreshCw
+                                        className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                                    />
+                                    <span>
+                                        {lastUpdatedAt
+                                            ? `Terakhir diperbarui ${lastUpdatedAt.toLocaleTimeString('id-ID')}`
+                                            : 'Memuat data...'}
+                                    </span>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant={
+                                        isRealtimeEnabled
+                                            ? 'secondary'
+                                            : 'default'
+                                    }
+                                    className="w-full gap-2 md:w-auto"
+                                    onClick={() => {
+                                        if (!isRealtimeEnabled) {
+                                            fetchOrders();
+                                        }
+
+                                        setIsRealtimeEnabled(
+                                            (isEnabled) => !isEnabled,
+                                        );
+                                    }}
+                                >
+                                    {isRealtimeEnabled ? (
+                                        <PauseCircle className="h-4 w-4" />
+                                    ) : (
+                                        <PlayCircle className="h-4 w-4" />
+                                    )}
+                                    {isRealtimeEnabled
+                                        ? 'Jeda Realtime'
+                                        : 'Aktifkan Realtime'}
+                                </Button>
+                                <span className="text-xs text-muted-foreground">
+                                    {isRealtimeEnabled
+                                        ? 'Realtime aktif setiap 3 detik.'
+                                        : 'Realtime sedang dijeda.'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {fetchError && (
+                            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {fetchError}
+                            </div>
+                        )}
+                    </div>
+
+                    <Table className="rounded-lg border">
                         <TableCaption>
-                            {orders.length} list of orders.
+                            {orders.length} dari {paginationMeta.total} pesanan
+                            ditampilkan.
                         </TableCaption>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>update</TableHead>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Status Payment</TableHead>
-                                <TableHead>Status Order</TableHead>
-                                <TableHead>Items</TableHead>
-                                <TableHead>Price</TableHead>
+                                <TableHead>Diperbarui</TableHead>
+                                <TableHead>Pelanggan</TableHead>
+                                <TableHead>Status Pembayaran</TableHead>
+                                <TableHead>Status Pesanan</TableHead>
+                                <TableHead>Item</TableHead>
+                                <TableHead>Total</TableHead>
                                 <TableHead className="text-center">
-                                    Actions
+                                    Aksi
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
+                            {orders.length === 0 && (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={7}
+                                        className="h-24 text-center text-muted-foreground"
+                                    >
+                                        Belum ada pesanan yang cocok dengan
+                                        filter.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+
                             {orders.map((order) => (
                                 <TableRow
                                     key={order.id}
@@ -334,93 +541,54 @@ export default function Order() {
                                         setSelectedOrder(order);
                                         setIsModalOpen(true); // Membuka modal
                                     }}
-                                    className="cursor-pointer hover:bg-gray-50"
+                                    className="cursor-pointer hover:bg-accent/40"
                                 >
-                                    <TableCell>
-                                        {new Date(
-                                            order.updated_at || '',
-                                        ).toLocaleDateString('en-US', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit',
-                                        })}
+                                    <TableCell className="text-muted-foreground">
+                                        {formatDateTime(order.updated_at)}
                                     </TableCell>
-                                    <TableCell className="flex items-center gap-2 font-medium">
-                                        {order.name}
-                                        {order.deleted_at && (
-                                            <Badge className="bg-gray-200 px-1 py-0.5 text-xs text-gray-700">
-                                                Deleted
-                                            </Badge>
+                                    <TableCell className="font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <span>{order.name}</span>
+                                            {order.deleted_at && (
+                                                <Badge className="bg-gray-200 px-1 py-0.5 text-xs text-gray-700">
+                                                    Terhapus
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            Dibuat:{' '}
+                                            {formatDateTime(order.created_at)}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* STATUS BADGE */}
+                                    <TableCell>
+                                        {getPaymentStatusBadge(
+                                            order.payment_status,
                                         )}
                                     </TableCell>
 
                                     {/* STATUS BADGE */}
                                     <TableCell>
-                                        {order.payment_status === 'paid' ? (
-                                            <Badge className="bg-green-500 px-2">
-                                                Paid
-                                            </Badge>
-                                        ) : order.payment_status ===
-                                          'pending' ? (
-                                            <Badge className="bg-yellow-500 px-2">
-                                                Pending
-                                            </Badge>
-                                        ) : order.payment_status ===
-                                          'failed' ? (
-                                            <Badge className="bg-red-500 px-2">
-                                                Failed
-                                            </Badge>
-                                        ) : (
-                                            <Badge className="bg-gray-500 px-2">
-                                                Unknown
-                                            </Badge>
-                                        )}
-                                    </TableCell>
-
-                                    {/* STATUS BADGE */}
-                                    <TableCell>
-                                        {order.status === 'completed' ? (
-                                            <Badge className="bg-green-500 px-2">
-                                                Completed
-                                            </Badge>
-                                        ) : order.status === 'pending' ? (
-                                            <Badge className="bg-yellow-500 px-2">
-                                                Pending
-                                            </Badge>
-                                        ) : order.status === 'preparing' ? (
-                                            <Badge className="bg-yellow-500 px-2">
-                                                {/* Edit */}Preparing
-                                            </Badge>
-                                        ) : order.status === 'cancelled' ? (
-                                            <Badge className="bg-red-500 px-2">
-                                                Cancelled
-                                            </Badge>
-                                        ) : (
-                                            <Badge className="bg-gray-500 px-2">
-                                                Unknown
-                                            </Badge>
-                                        )}
+                                        {getOrderStatusBadge(order.status)}
                                     </TableCell>
                                     <TableCell>
                                         {order.order_items
                                             ? order.order_items.length
                                             : 0}{' '}
-                                        items
+                                        item
                                     </TableCell>
                                     <TableCell>
-                                        {order.total
-                                            ? 'Rp ' +
-                                              order.total.toLocaleString(
-                                                  'id-ID',
-                                              )
-                                            : 'Rp 0'}
+                                        {formatCurrency(order.total)}
                                     </TableCell>
 
                                     {/* ACTIONS */}
-                                    <TableCell className="text-center">
+                                    <TableCell
+                                        className="text-center"
+                                        onClick={(event: MouseEvent) =>
+                                            event.stopPropagation()
+                                        }
+                                    >
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button
@@ -461,17 +629,17 @@ export default function Order() {
                                                                             ),
                                                                     );
                                                                     alert(
-                                                                        'Order soft deleted',
+                                                                        'Pesanan berhasil dihapus sementara',
                                                                     );
                                                                 } catch {
                                                                     alert(
-                                                                        'Soft delete failed',
+                                                                        'Gagal menghapus pesanan sementara',
                                                                     );
                                                                 }
                                                             }
                                                         }}
                                                     >
-                                                        Soft Delete
+                                                        Hapus Sementara
                                                     </DropdownMenuItem>
                                                 )}
 
@@ -490,67 +658,72 @@ export default function Order() {
                                                                     );
                                                                     fetchOrders();
                                                                     alert(
-                                                                        'Order restored',
+                                                                        'Pesanan berhasil dipulihkan',
                                                                     );
                                                                 } catch {
                                                                     alert(
-                                                                        'Restore failed',
+                                                                        'Gagal memulihkan pesanan',
                                                                     );
                                                                 }
                                                             }
                                                         }}
                                                     >
-                                                        Restore
+                                                        Pulihkan
                                                     </DropdownMenuItem>
                                                 )}
 
-                                                {/* Hard Delete selalu ada (opsional) */}
-                                                <DropdownMenuItem
-                                                    className="font-bold text-red-600"
-                                                    onClick={async () => {
-                                                        if (order.id !== null) {
-                                                            try {
-                                                                await axios.delete(
-                                                                    `/tools/orders/${order.id}/force-delete`,
-                                                                );
-                                                                setOrders(
-                                                                    (prev) =>
-                                                                        prev.filter(
-                                                                            (
-                                                                                ord,
-                                                                            ) =>
-                                                                                ord.id !==
-                                                                                order.id,
-                                                                        ),
-                                                                );
-                                                                alert(
-                                                                    'Order permanently deleted',
-                                                                );
-                                                            } catch {
-                                                                alert(
-                                                                    'Hard delete failed',
-                                                                );
+                                                {order.deleted_at && (
+                                                    <DropdownMenuItem
+                                                        className="font-bold text-red-600"
+                                                        onClick={async () => {
+                                                            if (
+                                                                order.id !==
+                                                                null
+                                                            ) {
+                                                                try {
+                                                                    await axios.delete(
+                                                                        `/tools/orders/${order.id}/force-delete`,
+                                                                    );
+                                                                    setOrders(
+                                                                        (
+                                                                            prev,
+                                                                        ) =>
+                                                                            prev.filter(
+                                                                                (
+                                                                                    ord,
+                                                                                ) =>
+                                                                                    ord.id !==
+                                                                                    order.id,
+                                                                            ),
+                                                                    );
+                                                                    alert(
+                                                                        'Pesanan berhasil dihapus permanen',
+                                                                    );
+                                                                } catch {
+                                                                    alert(
+                                                                        'Gagal menghapus pesanan permanen',
+                                                                    );
+                                                                }
                                                             }
-                                                        }
-                                                    }}
-                                                >
-                                                    Hard Delete
-                                                </DropdownMenuItem>
+                                                        }}
+                                                    >
+                                                        Hapus Permanen
+                                                    </DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
-                        <TableFooter></TableFooter>
                     </Table>
 
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                         <DialogContent className="max-h-[80vh] w-full overflow-y-auto sm:w-3/4 lg:w-1/2">
                             <DialogHeader>
-                                <DialogTitle>Order Details</DialogTitle>
+                                <DialogTitle>Detail Pesanan</DialogTitle>
                                 <DialogDescription>
-                                    View and manage the details of this order.
+                                    Lihat detail pesanan dan ubah status proses.
                                 </DialogDescription>
                             </DialogHeader>
 
@@ -559,64 +732,25 @@ export default function Order() {
                                     {/* General Information */}
                                     <div className="grid gap-4 py-4">
                                         <div>
-                                            <strong>Name:</strong>{' '}
+                                            <strong>Nama:</strong>{' '}
                                             {selectedOrder.name}
                                         </div>
                                         <div>
-                                            <strong>Status Payment:</strong>{' '}
-                                            {selectedOrder.payment_status ===
-                                            'paid' ? (
-                                                <Badge className="bg-green-500 px-2">
-                                                    Paid
-                                                </Badge>
-                                            ) : selectedOrder.payment_status ===
-                                              'pending' ? (
-                                                <Badge className="bg-yellow-500 px-2">
-                                                    Pending
-                                                </Badge>
-                                            ) : selectedOrder.payment_status ===
-                                              'failed' ? (
-                                                <Badge className="bg-red-500 px-2">
-                                                    Failed
-                                                </Badge>
-                                            ) : (
-                                                <Badge className="bg-gray-500 px-2">
-                                                    Unknown
-                                                </Badge>
+                                            <strong>Status Pembayaran:</strong>{' '}
+                                            {getPaymentStatusBadge(
+                                                selectedOrder.payment_status,
                                             )}
                                         </div>
                                         <div>
-                                            <strong>Status Order:</strong>{' '}
-                                            {selectedOrder.status ===
-                                            'completed' ? (
-                                                <Badge className="bg-green-500 px-2">
-                                                    Completed
-                                                </Badge>
-                                            ) : selectedOrder.status ===
-                                              'pending' ? (
-                                                <Badge className="bg-yellow-500 px-2">
-                                                    Pending
-                                                </Badge>
-                                            ) : selectedOrder.status ===
-                                              'preparing' ? (
-                                                <Badge className="bg-yellow-500 px-2">
-                                                    Preparing
-                                                </Badge>
-                                            ) : selectedOrder.status ===
-                                              'cancelled' ? (
-                                                <Badge className="bg-red-500 px-2">
-                                                    Cancelled
-                                                </Badge>
-                                            ) : (
-                                                <Badge className="bg-gray-500 px-2">
-                                                    Unknown
-                                                </Badge>
+                                            <strong>Status Pesanan:</strong>{' '}
+                                            {getOrderStatusBadge(
+                                                selectedOrder.status,
                                             )}
                                         </div>
                                         <div>
-                                            <strong>Total:</strong> Rp{' '}
-                                            {selectedOrder.total?.toLocaleString(
-                                                'id-ID',
+                                            <strong>Total:</strong>{' '}
+                                            {formatCurrency(
+                                                selectedOrder.total,
                                             )}
                                         </div>
                                     </div>
@@ -624,18 +758,18 @@ export default function Order() {
                                     {/* Order Items */}
                                     <div className="mt-4">
                                         <h3 className="mb-2 text-lg font-semibold">
-                                            Order Items
+                                            Item Pesanan
                                         </h3>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
                                                     <TableHead>
-                                                        Product
+                                                        Produk
                                                     </TableHead>
                                                     <TableHead>
-                                                        Quantity
+                                                        Jumlah
                                                     </TableHead>
-                                                    <TableHead>Price</TableHead>
+                                                    <TableHead>Harga</TableHead>
                                                     <TableHead>
                                                         Subtotal
                                                     </TableHead>
@@ -646,24 +780,32 @@ export default function Order() {
                                                     (item) => (
                                                         <TableRow key={item.id}>
                                                             <TableCell>
-                                                                Product ID:{' '}
-                                                                {
-                                                                    item.product_id
-                                                                }
+                                                                {item.product
+                                                                    ?.name ??
+                                                                    `Produk #${item.product_id}`}
+                                                                {item.variant
+                                                                    ?.name && (
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        Varian:{' '}
+                                                                        {
+                                                                            item
+                                                                                .variant
+                                                                                .name
+                                                                        }
+                                                                    </div>
+                                                                )}
                                                             </TableCell>
                                                             <TableCell>
                                                                 {item.qty}
                                                             </TableCell>
                                                             <TableCell>
-                                                                Rp{' '}
-                                                                {item.price?.toLocaleString(
-                                                                    'id-ID',
+                                                                {formatCurrency(
+                                                                    item.price,
                                                                 )}
                                                             </TableCell>
                                                             <TableCell>
-                                                                Rp{' '}
-                                                                {item.subtotal?.toLocaleString(
-                                                                    'id-ID',
+                                                                {formatCurrency(
+                                                                    item.subtotal,
                                                                 )}
                                                             </TableCell>
                                                         </TableRow>
@@ -676,16 +818,16 @@ export default function Order() {
                                     {/* Payments */}
                                     <div className="mt-4">
                                         <h3 className="mb-2 text-lg font-semibold">
-                                            Payments
+                                            Pembayaran
                                         </h3>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
                                                     <TableHead>
-                                                        Reference ID
+                                                        Referensi
                                                     </TableHead>
                                                     <TableHead>
-                                                        Amount
+                                                        Jumlah
                                                     </TableHead>
                                                     <TableHead>
                                                         Status
@@ -704,21 +846,13 @@ export default function Order() {
                                                                 }
                                                             </TableCell>
                                                             <TableCell>
-                                                                Rp{' '}
-                                                                {payment.amount?.toLocaleString(
-                                                                    'id-ID',
+                                                                {formatCurrency(
+                                                                    payment.amount,
                                                                 )}
                                                             </TableCell>
                                                             <TableCell>
-                                                                {payment.status ===
-                                                                'paid' ? (
-                                                                    <Badge className="bg-green-500 px-2">
-                                                                        Paid
-                                                                    </Badge>
-                                                                ) : (
-                                                                    <Badge className="bg-yellow-500 px-2">
-                                                                        Pending
-                                                                    </Badge>
+                                                                {getPaymentStatusBadge(
+                                                                    payment.status,
                                                                 )}
                                                             </TableCell>
                                                         </TableRow>
@@ -731,7 +865,7 @@ export default function Order() {
                                     {/* Update Order Status */}
                                     <div className="mt-4">
                                         <h3 className="mb-2 text-lg font-semibold">
-                                            Update Order Status
+                                            Ubah Status Pesanan
                                         </h3>
                                         <form
                                             onSubmit={async (e) => {
@@ -747,7 +881,7 @@ export default function Order() {
                                                         );
                                                         fetchOrders(); // Refresh data
                                                         alert(
-                                                            'Order status updated',
+                                                            'Status pesanan berhasil diperbarui',
                                                         );
                                                         setIsModalOpen(false);
                                                     } catch (error) {
@@ -756,7 +890,7 @@ export default function Order() {
                                                             error,
                                                         );
                                                         alert(
-                                                            'Failed to update order status',
+                                                            'Gagal memperbarui status pesanan',
                                                         );
                                                     }
                                                 }
@@ -779,20 +913,20 @@ export default function Order() {
                                                     }
                                                 >
                                                     <SelectTrigger className="col-span-3">
-                                                        <SelectValue placeholder="Select status" />
+                                                        <SelectValue placeholder="Pilih status" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="pending">
-                                                            Pending
+                                                            Menunggu
                                                         </SelectItem>
                                                         <SelectItem value="preparing">
-                                                            Preparing
+                                                            Diproses
                                                         </SelectItem>
                                                         <SelectItem value="completed">
-                                                            Completed
+                                                            Selesai
                                                         </SelectItem>
                                                         <SelectItem value="cancelled">
-                                                            Cancelled
+                                                            Dibatalkan
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -801,7 +935,7 @@ export default function Order() {
                                                 type="submit"
                                                 className="mt-4"
                                             >
-                                                Update Status
+                                                Simpan Status
                                             </Button>
                                         </form>
                                     </div>
