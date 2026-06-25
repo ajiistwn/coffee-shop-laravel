@@ -6,6 +6,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Order;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 class OrderSeeder extends Seeder
 {
@@ -20,7 +21,7 @@ class OrderSeeder extends Seeder
         // Loop untuk membuat data dummy
         for ($i = 0; $i < 20; $i++) {
             // Simulasi pembelian oleh user tanpa login
-            $isGuest = fake()->boolean(70); // 70% kemungkinan guest (tanpa login)
+            $isGuest = random_int(1, 100) <= 70; // 70% kemungkinan guest (tanpa login)
 
             // Generate session token jika guest
             $sessionToken = $isGuest ? $this->generateSessionToken() : null;
@@ -32,13 +33,13 @@ class OrderSeeder extends Seeder
             Order::create([
                 'user_id' => $userId,
                 'session_token' => $sessionToken,
-                'name' => fake()->name(),
+                'name' => $this->randomCustomerName(),
                 'receipt_number' => $this->generateUniqueReceiptNumber(),
                 'total' => rand(100000, 1000000), // Total antara 100.000 - 1.000.000
-                'payment_method' => fake()->randomElement(['cash', 'qris', 'ewallet', 'va']),
-                'payment_status' => fake()->randomElement(['pending', 'paid', 'failed']),
-                'status' => fake()->randomElement(['pending', 'preparing', 'completed', 'cancelled']),
-                'xendit_invoice_id' => fake()->optional()->uuid(), // Invoice ID opsional
+                'payment_method' => $this->randomElement(['cash', 'qris', 'ewallet', 'va']),
+                'payment_status' => $this->randomElement(['pending', 'paid', 'failed']),
+                'status' => $this->randomElement(['pending', 'preparing', 'completed', 'cancelled']),
+                'xendit_invoice_id' => random_int(1, 100) <= 50 ? (string) Str::uuid() : null,
             ]);
         }
     }
@@ -46,7 +47,7 @@ class OrderSeeder extends Seeder
      private function generateUniqueReceiptNumber(): string
     {
         do {
-            $receiptNumber = 'ORD-' . fake()->unique()->numerify('######');
+            $receiptNumber = 'ORD-' . str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         } while (Order::where('receipt_number', $receiptNumber)->exists());
 
         return $receiptNumber;
@@ -57,6 +58,28 @@ class OrderSeeder extends Seeder
      */
     private function generateSessionToken(): string
     {
-        return \Illuminate\Support\Str::uuid(); // Simulasi crypto.randomUUID()
+        return (string) Str::uuid(); // Simulasi crypto.randomUUID()
+    }
+
+    private function randomCustomerName(): string
+    {
+        return $this->randomElement([
+            'Andi Saputra',
+            'Budi Santoso',
+            'Citra Lestari',
+            'Dewi Anggraini',
+            'Eko Prasetyo',
+            'Fitri Rahma',
+            'Gilang Ramadhan',
+            'Hana Putri',
+        ]);
+    }
+
+    /**
+     * @param array<int, string> $items
+     */
+    private function randomElement(array $items): string
+    {
+        return $items[array_rand($items)];
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Order;
 use App\Models\Payment;
+use Illuminate\Support\Str;
 
 class PaymentSeeder extends Seeder
 {
@@ -24,7 +25,7 @@ class PaymentSeeder extends Seeder
                 'order_id' => $order->id,
                 'payment_channel' => $this->getRandomPaymentChannel(),
                 'reference_id' => $this->generateReferenceId(),
-                'status' => fake()->randomElement(['pending', 'paid', 'failed']),
+                'status' => $this->randomElement(['pending', 'paid', 'failed']),
                 'amount' => $order->total, // Jumlah pembayaran sama dengan total order
                 'raw_callback' => $this->generateRawCallback(), // Simulasi callback JSON
             ]);
@@ -36,7 +37,7 @@ class PaymentSeeder extends Seeder
      */
     private function getRandomPaymentChannel(): string
     {
-        return fake()->randomElement(['qris', 'ovo', 'dana', 'va_bca', 'va_mandiri', 'gopay']);
+        return $this->randomElement(['qris', 'ovo', 'dana', 'va_bca', 'va_mandiri', 'gopay']);
     }
 
     /**
@@ -44,7 +45,7 @@ class PaymentSeeder extends Seeder
      */
     private function generateReferenceId(): string
     {
-        return 'REF-' . fake()->unique()->numerify('########');
+        return 'REF-' . random_int(10000000, 99999999);
     }
 
     /**
@@ -54,14 +55,22 @@ class PaymentSeeder extends Seeder
     {
         // Simulasi data callback dari Xendit dalam format JSON
         $callbackData = [
-            'external_id' => 'ext-' . fake()->unique()->numerify('######'),
-            'payment_method' => fake()->randomElement(['QRIS', 'OVO', 'DANA', 'VA']),
-            'transaction_status' => fake()->randomElement(['PENDING', 'SETTLED', 'FAILED']),
+            'external_id' => 'ext-' . Str::lower((string) Str::uuid()),
+            'payment_method' => $this->randomElement(['QRIS', 'OVO', 'DANA', 'VA']),
+            'transaction_status' => $this->randomElement(['PENDING', 'SETTLED', 'FAILED']),
             'amount' => rand(100000, 1000000),
             'timestamp' => now()->toIso8601String(),
         ];
 
         // Return sebagai JSON atau NULL (opsional)
-        return fake()->optional()->passthrough(json_encode($callbackData));
+        return random_int(1, 100) <= 70 ? json_encode($callbackData) : null;
+    }
+
+    /**
+     * @param array<int, string> $items
+     */
+    private function randomElement(array $items): string
+    {
+        return $items[array_rand($items)];
     }
 }

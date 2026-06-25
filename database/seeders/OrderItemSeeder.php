@@ -43,9 +43,22 @@ class OrderItemSeeder extends Seeder
                     'qty' => $qty,
                     'price' => $price,
                     'subtotal' => $subtotal,
-                    'notes' => fake()->optional()->sentence(), // Catatan opsional
+                    'notes' => random_int(1, 100) <= 40 ? $this->randomNote() : null,
                 ]);
             }
         }
+    }
+
+    private function randomNote(): string
+    {
+        $notes = [
+            'Tanpa gula',
+            'Es sedikit',
+            'Tambah topping',
+            'Tidak terlalu panas',
+            'Bungkus terpisah',
+        ];
+
+        return $notes[array_rand($notes)];
     }
 }
